@@ -1,6 +1,8 @@
  Le script import_kb_glpi.php permet d'importer et/ou de mettre à jour la base de connaissance Glpi à partir d'un
 fichier Json exporté depuis une plate-forme de ticketing Jira.
 
+ Pour utiliser ce script, copier le dossier import_kb_glpi dans le répertoire scripts de Glpi. Se placer dans
+glpi/scripts/import_kb_glpi et lancer php import_kb_glpi.php
 
  Ce script lit le contenu d'un fichier au format Json pour réaliser l'importation. Il dispose également de quelques
  paramètres d'appel:
