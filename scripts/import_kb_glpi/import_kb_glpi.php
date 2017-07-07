@@ -41,7 +41,7 @@ $doc = <<<DOC
 import_kb_glpi.php
 
 Usage:
-    import_kb_glpi.php [<name>] [--entity=<entity>] [--quiet]
+    import_kb_glpi.php [<name>] [--entity=<entity>] [--quiet] [--no-update]
     import_kb_glpi.php (-h | --help)
     import_kb_glpi.php (-q | --quiet)
     import_kb_glpi.php (-n | --no-update)
@@ -64,6 +64,7 @@ $DIR_PREFIX="../../";
 $DIR_PREFIX="/var/www/html/glpi-9.1";
 include ("$DIR_PREFIX/inc/includes.php");
 include ("$DIR_PREFIX/inc/entity.class.php");
+include ("$DIR_PREFIX/inc/entity_knowbaseitem.class.php");
 include ("$DIR_PREFIX/inc/knowbaseitemcategory.class.php");
 include ("$DIR_PREFIX/inc/knowbaseitem.class.php");
 include ("$DIR_PREFIX/inc/documentcategory.class.php");
@@ -99,7 +100,8 @@ if ($args['<name>']) {
  */
 $file_content = file_get_contents($file);
 if (! $file_content) {
-    die("The file $file cannot be opened!\n");
+    make_log("The file $file cannot be opened!\n", TRUE);
+    exit(1);
 }
 $json = json_decode($file_content, true); // decode the JSON into an associative array
 
@@ -121,7 +123,8 @@ if (count($db_entities) > 0) {
     $entity_id = $found_entity["id"];
     make_log("-> found " . count($db_entities) . " matching entity: " . $found_entity["completename"] . "\n");
 } else {
-    die("The entity '$entity' does not exist in the database!\n");
+    make_log("The entity '$entity' does not exist in the database!\n", TRUE);
+    exit(1);
 }
 
 /* Projects */
@@ -140,7 +143,7 @@ foreach ($json['projects'] as $field => $project) {
         'entities_id'   => $entity_id,
         'name'          => $category_name,
         'completename'  => $category_name,
-        'comment'       => "Category created when importing the file $file"
+        'comment'       => $DB->escape("Categorie créée à l'importation du fichier $file (" . date('d/m/Y h:i:s') . ")")
     );
 
     if (count($categories) > 0) {
@@ -148,23 +151,24 @@ foreach ($json['projects'] as $field => $project) {
         $category_id = $found_category["id"];
         make_log("-> found an existing KB category for this project: " . $found_category["completename"]);
         if ($update) {
-            make_log("-> updating a KB category: '$category_name'...", TRUE);
+            make_log("-> updating a KB category: '$category_name'...");
             $input["id"] = $category_id;
-            $category_id = $db_kb_category->update($input);
-            if (! $category_id) {
-                die("Error when updating a KB category: '$category_name'!\n");
+            if (! $db_kb_category->update($input)) {
+                make_log("Error when updating a KB category: '$category_name'!\n", TRUE);
+                exit(2);
             } else {
-                make_log("updated.", TRUE);
+                make_log("-> updated.");
             }
         }
     } else {
         // Create a new KB category
-        make_log("-> creating a new KB category: '$category_name'...", TRUE);
+        make_log("-> creating a new KB category: '$category_name'...");
         $category_id = $db_kb_category->add($input);
         if (! $category_id) {
-            die("Error when creating a new KB category: '$category_name'!\n");
+            make_log("Error when creating a new KB category: '$category_name'!\n", TRUE);
+            exit(2);
         } else {
-            make_log("created.", TRUE);
+            make_log("created.");
         }
     }
 
@@ -179,7 +183,7 @@ foreach ($json['projects'] as $field => $project) {
         'entities_id'   => $entity_id,
         'name'          => $category_name,
         'completename'  => $category_name,
-        'comment'       => "Category created when importing the file $file"
+        'comment'       => $DB->escape("Categorie créée à l'importation du fichier $file (" . date('d/m/Y h:i:s') . ")")
     );
 
     if (count($categories) > 0) {
@@ -187,22 +191,23 @@ foreach ($json['projects'] as $field => $project) {
         $doc_category_id = $found_doc_category["id"];
         make_log("-> found an existing document category for this project: " . $found_doc_category["completename"]);
         if ($update) {
-            make_log("-> updating a document category: '$category_name'...", TRUE);
+            make_log("-> updating a document category: '$category_name'...");
             $input["id"] = $doc_category_id;
-            $doc_category_id = $db_doc_category->update($input);
-            if (! $doc_category_id) {
-                die("Error when updating a document category: '$category_name'!\n");
+            if (! $db_doc_category->update($input)) {
+                make_log("Error when updating a document category: '$category_name'!\n", TRUE);
+                exit(2);
             } else {
-                make_log("updated.", TRUE);
+                make_log("-> updated.");
             }
         }
     } else {
-        make_log("-> creating a new document category: '$category_name'...", TRUE);
+        make_log("-> creating a new document category: '$category_name'...");
         $doc_category_id = $db_doc_category->add($input);
         if (! $doc_category_id) {
-            die("Error when creating a new document category: '$category_name'!\n");
+            make_log("Error when creating a new document category: '$category_name'!\n", TRUE);
+            exit(2);
         } else {
-            make_log("created.", TRUE);
+            make_log("created.");
         }
     }
 
@@ -211,13 +216,24 @@ foreach ($json['projects'] as $field => $project) {
         $title = "[$id]: " . $issue["summary"];
         $description = $issue["description"];
         $reporter = $issue["reporter"];
+        $status = $issue["status"];
         $type = $issue["issueType"];
         $priority = $issue["priority"];
         $creation_date = date('Y/m/d', $issue["created"] / 1000);
+        $resolution_date = NULL;
+        if (array_key_exists("resolutionDate", $issue)) {
+            $resolution_date = date('Y/m/d', $issue["resolutionDate"] / 1000);
+        }
+
+        make_log("Found an issue: $id");
 
         $body = "<p>$title</p>";
         $body .= "<p>---</p>";
-        $body .= "<p>Issue: $id, créée le: $creation_date par: $reporter</p>";
+        $body .= "<p>Issue: $id, créée le: $creation_date par: $reporter, status: $status";
+        if ($resolution_date) {
+            $body .= ", résolue: $resolution_date</p>";
+        }
+        $body .= "</p>";
         $body .= "<p>Type: $type, priorité: $priority</p>";
         $body .= "<p>---</p>";
         $body .= "<p>$description</p>";
@@ -225,7 +241,8 @@ foreach ($json['projects'] as $field => $project) {
         /* Attachments */
         $documents = array();
         if (count($issue["attachments"]) > 0) {
-            $body .= "---\n\nDocuments joints:";
+            $body .= "<p>---</p>";
+            $body .= "<p>Documents joints:</p>";
             foreach ($issue["attachments"] as $attachment) {
                 $date = date('Y/m/d', $attachment["created"] / 1000);
                 $author = $attachment["attacher"];
@@ -253,34 +270,34 @@ foreach ($json['projects'] as $field => $project) {
                         make_log("-> getting the document: '$uri'...");
                         $attachment_content = file_get_contents($uri);
                         if (! $attachment_content) {
-                            die("The attachment $attachment_content cannot be opened!\n");
-                        }
-                        $tmp_filename = GLPI_TMP_DIR . "/ikg_" . date('Y-m-d') . "_" . basename($uri);
-                        make_log("-> tmp file: '$tmp_filename'...");
-                        $handle = fopen($tmp_filename, "c");
-                        fwrite($handle, $attachment_content);
-                        fclose($handle);
-
-                        $input = array(
-                            'id'                    => $doc_id,
-                            'entities_id'           => $entity_id,
-                            '_filename'             => array(basename($tmp_filename)),
-                            'name'                  => $doc_name,
-                            'link'                  => $uri,
-                            'documentcategories_id' => $doc_category_id
-                        );
-
-                        make_log("-> updating a document: '$uri'...");
-                        $doc_id = $db_doc->update($input);
-                        if (!$doc_id) {
-                            die("Error when updating a document: '$uri'!\n");
+                            make_log("-> *** attachment not available: '$uri'...", TRUE);
                         } else {
-                            make_log("updated.", TRUE);
+                            $tmp_filename = GLPI_TMP_DIR . "/ikg_" . date('Y-m-d') . "_" . basename($uri);
+                            $handle = fopen($tmp_filename, "c");
+                            fwrite($handle, $attachment_content);
+                            fclose($handle);
+
+                            $input = array(
+                                'id'                    => $doc_id,
+                                'entities_id'           => $entity_id,
+                                '_filename'             => array(basename($tmp_filename)),
+                                'name'                  => $doc_name,
+                                'link'                  => $uri,
+                                'documentcategories_id' => $doc_category_id
+                            );
+
+                            make_log("-> updating a document: '$uri'...");
+                            if (! $db_doc->update($input)) {
+                                make_log("Error when updating a document: '$uri'!\n", TRUE);
+                                exit(2);
+                            } else {
+                                make_log("-> updated.");
+                            }
                         }
                     }
                 } else {
                     // Create a new document
-                    make_log("-> creating a new document: '$uri'...", TRUE);
+                    make_log("-> creating a new document: '$uri'...");
 
                     /*
                          * Get the attachment content and store in a GLPI temporary file
@@ -288,27 +305,28 @@ foreach ($json['projects'] as $field => $project) {
                     make_log("-> getting the document: '$uri'...");
                     $attachment_content = file_get_contents($uri);
                     if (! $attachment_content) {
-                        die("The attachment $attachment_content cannot be opened!\n");
-                    }
-                    $tmp_filename = GLPI_TMP_DIR . "/ikg_" . date('Y-m-d') . "_" . basename($uri);
-                    make_log("-> tmp file: '$tmp_filename'...");
-                    $handle = fopen($tmp_filename, "c");
-                    fwrite($handle, $attachment_content);
-                    fclose($handle);
-
-                    $input = array(
-                        'entities_id'           => $entity_id,
-                        '_filename'             => array(basename($tmp_filename)),
-                        'name'                  => $doc_name,
-                        'link'                  => $uri,
-                        'documentcategories_id' => $doc_category_id
-                    );
-
-                    $doc_id = $db_doc->add($input);
-                    if (! $doc_id) {
-                        die("Error when creating a new document: '$uri'!\n");
+                        make_log("-> *** attachment not available: '$uri'...", TRUE);
                     } else {
-                        make_log("created.", TRUE);
+                        $tmp_filename = GLPI_TMP_DIR . "/ikg_" . date('Y-m-d') . "_" . basename($uri);
+                        $handle = fopen($tmp_filename, "c");
+                        fwrite($handle, $attachment_content);
+                        fclose($handle);
+
+                        $input = array(
+                            'entities_id'           => $entity_id,
+                            '_filename'             => array(basename($tmp_filename)),
+                            'name'                  => $doc_name,
+                            'link'                  => $uri,
+                            'documentcategories_id' => $doc_category_id
+                        );
+
+                        $doc_id = $db_doc->add($input);
+                        if (! $doc_id) {
+                            make_log("Error when creating a new document: '$uri'!\n", TRUE);
+                            exit(2);
+                        } else {
+                            make_log("created.");
+                        }
                     }
                 }
 
@@ -327,7 +345,8 @@ foreach ($json['projects'] as $field => $project) {
 
         /* Comments */
         if (count($issue["comments"]) > 0) {
-            $body .= "---\n\nCommentaires:";
+            $body .= "<p>---</p>";
+            $body .= "<p>Commentaires:</p>";
             foreach ($issue["comments"] as $comment) {
                 $date = date('Y/m/d', $comment["created"] / 1000);
                 $author = $comment["author"];
@@ -338,7 +357,8 @@ foreach ($json['projects'] as $field => $project) {
 
         /* History */
         if (count($issue["history"]) > 0) {
-            $body .= "---\n\nHistorique:";
+            $body .= "<p>---</p>";
+            $body .= "<p>Historique:</p>";
             foreach ($issue["history"] as $event) {
                 $date = date('Y/m/d', $event["created"] / 1000);
                 $author = $event["author"];
@@ -346,7 +366,7 @@ foreach ($json['projects'] as $field => $project) {
                 foreach ($event["items"] as $item) {
                     $field = $item["field"];
                     if (strcmp($field, "status") != 0) {
-                        make_log("  ***** event: " . $date . ", " . $author . ": " . $field, TRUE);
+                        make_log("  ***** event: " . $date . ", " . $author . ": " . $field);
                     } else {
                         $old = $item["oldValue"];
                         if (is_numeric($old)) {
@@ -371,27 +391,67 @@ foreach ($json['projects'] as $field => $project) {
         $item_id = NULL;
         $db_kb_item = new KnowbaseItem();
         $items = $db_kb_item->find("`name`='".$title."'", '', 1);
+
+        $input = array(
+            'knowbaseitemcategories_id' => $category_id,
+            'name'                      => $title,
+            'answer'                    => $body
+        );
+
         if (count($items) > 0) {
             $found_item = current($items);
             $item_id = $found_item["id"];
             make_log("-> found an existing KB item for this issue: " . $found_item["name"]);
+            if ($update) {
+                make_log("-> updating a KB item: '$category_name'...");
+                $input["id"] = $item_id;
+                if (! $db_kb_item->update($input)) {
+                    make_log("Error when updating a KB item: '$title'!\n", TRUE);
+                    exit(2);
+                } else {
+                    make_log("-> updated.");
+                }
+            }
         } else {
-            // Create a new KB item
-            $input = array(
-                'knowbaseitemcategories_id' => $category_id,
-                'name'                      => $title,
-                'answer'                    => $body
-            );
-
-            make_log("-> creating a new KB item: '$title'...", TRUE);
+            make_log("-> creating a new KB item: '$title'...");
             $item_id = $db_kb_item->add($input);
             if (! $item_id) {
-                die("Error when creating a new KB item: '$title'!\n");
+                make_log("Error when creating a new KB item: '$title'!\n", TRUE);
+                exit(2);
             } else {
-                make_log("created.", TRUE);
+                make_log("created.");
             }
         }
 
+        /*
+         * Create a relation between a KB item and the entity
+         */
+        $db_entity_item = new Entity_KnowbaseItem();
+        $relation = $db_entity_item->find("`knowbaseitems_id`='".$item_id."' AND `entities_id`='".$entity_id."'", '', 1);
+        if (count($relation) <= 0) {
+            // Create a new entity / item relation
+            make_log("-> creating a new item / entity relation...");
+
+            $input = array(
+                'entities_id'       => $entity_id,
+                'knowbaseitems_id'  => $item_id,
+                'is_recursive'      => 1
+            );
+
+            $relation_id = $db_entity_item->add($input);
+            if (! $relation_id) {
+                make_log("Error when creating a new item / entity relation!\n", TRUE);
+                exit(2);
+            } else {
+                make_log("created.");
+            }
+        } else {
+            make_log("-> found an item / entity relation...$entity_id / $item_id");
+        }
+
+        /*
+         * Create a relation between a KB item and its attachments
+         */
         if (count($documents) > 0) {
             $db_doc_item = new Document_Item();
             foreach ($documents as $doc_id) {
@@ -409,15 +469,14 @@ foreach ($json['projects'] as $field => $project) {
 
                     $doc_id = $db_doc_item->add($input);
                     if (! $doc_id) {
-                        die("Error when creating a new item / document relation: '$uri'!\n");
+                        make_log("Error when creating a new item / document relation!\n", TRUE);
+                        exit(2);
                     } else {
-                        make_log("created.", TRUE);
+                        make_log("created.");
                     }
                 }
             }
         }
-        make_log(" - issue: \n$body");
-//        exit(1);
     }
 }
 

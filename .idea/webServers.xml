@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="16599ac9-68b6-4918-af5b-7be2c6c87ec4" name="glpi-9.1" url="http://localhost/glpi-9.1">
+        <fileTransfer port="0" mountedRoot="/var/www/html/glpi-9.1" accessType="MOUNT" />
+      </webServer>
+    </option>
+  </component>
+</project>
