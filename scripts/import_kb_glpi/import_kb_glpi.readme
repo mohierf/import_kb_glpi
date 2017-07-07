@@ -1,63 +1,200 @@
- Le script import_ip_ranges.php permet d'importer et/ou de mettre à jour la table des plages d'adresses IP du
-plugin FusionInventory ainsi que les relations entre les plages d'adresse IP et l'authentification SNMP à utiliser.
+ Le script import_kb_glpi.php permet d'importer et/ou de mettre à jour la base de connaissance Glpi à partir d'un
+fichier Json exporté depuis une plate-forme de ticketing Jira.
 
 
- Ce script lit le contenu d'un fichier au format CSV pour réaliser l'importation. Ce fichier doit être formatté de
-la façon suivante:
+ Ce script lit le contenu d'un fichier au format Json pour réaliser l'importation. Il dispose également de quelques
+ paramètres d'appel:
 
-    Nom;Entité;Début de la plage IP;Fin de la plage IP;Authentification SNMP
-    AdmConsoles_NT 240/24;Racine > Réseau ESU;10.107.240.1;10.107.240.200;WAN
-    AdmConsoles_NT 242/24;Racine > Réseau ESU;10.107.240.2;10.107.240.201;Passerelle
-    AdmDMZ11_NT;Racine > Réseau ESU;10.107.240.3;10.107.240.202;Passerelle
-    host-BRU_A-WanX;Racine > Etranger > Crasic Bruxelles	;10.107.240.4	;10.107.240.203	;Passerelle
-    host-BRU_D-WanX;Racine > Etranger > Crasic Bruxelles	;10.107.240.5	;10.107.240.204	;Passerelle
-    host-BRU_RO-WanX;Racine > Etranger > Crasic Bruxelles	;10.107.240.6	;10.107.240.205	;Passerelle
-    host-WAS_A-WanX;Racine > Etranger > Crasic Washington	;10.107.240.7	;10.107.240.206	;Passerelle
-    host-WAS_R-WanX;Racine > Etranger > Crasic Washington	;10.107.240.8	;10.107.240.207	;Passerelle
-    net-BRU_A-Vlan1400;Racine > Etranger > Crasic Bruxelles	;10.107.240.9	;10.107.240.208	;Passerelle
-    net-BRU_A-Vlan50;Racine > Etranger > Crasic Bruxelles	;10.107.240.10	;10.107.240.209	;Passerelle
-    net-BRU_D-Vlan1400;Racine > Etranger > Crasic Bruxelles	;10.107.240.11	;10.107.240.210	;WAN
-    net-BRU_D-Vlan50-1;Racine > Etranger > Crasic Bruxelles	;10.107.240.12	;10.107.240.211	;WAN
-    net-BRU_D-Vlan50-2;Racine > Etranger > Crasic Bruxelles	;10.107.240.13	;10.107.240.212	;WAN
-    net-BRU_RO-Vlan1400;Racine > Etranger > Crasic Bruxelles	;10.107.240.14	;10.107.240.213	;WAN
-    net-BRU_RO-Vlan50;Racine > Etranger > Crasic Bruxelles	;10.107.240.15	;10.107.240.214	;WAN
-    net-WAS_A-Vlan1400;Racine > Etranger > Crasic Washington	;10.107.240.16	;10.107.240.215	;WAN
-    net-WAS_A-Vlan50-1;Racine > Etranger > Crasic Washington	;10.107.240.17	;10.107.240.216	;WAN
-    net-WAS_A-Vlan50-2;Racine > Etranger > Crasic Washington	;10.107.240.18	;10.107.240.217	;WAN
-    net-WAS_A-Vlan50-3;Racine > Etranger > Crasic Washington	;10.107.240.19	;10.107.240.218	;WAN
-    net-WAS_A-Vlan50-4;	Racine > Etranger > Crasic Washington	;10.107.240.20	;10.107.240.219	;WAN
-    net-WAS_R-Vlan1400;	Racine > Etranger > Crasic Washington	;10.107.240.21	;10.107.240.220	;WAN
-    net-WAS_R-Vlan50;	Racine > Etranger > Crasic Washington	;10.107.240.22	;10.107.240.221	;WAN
+        import_kb_glpi.php
 
-    - chaque ligne doit contenir au moins 4 champs qui sont séparés par le caractère ; (point-virgule)
-    - le contenu d'un champ peut être entoure de " (double quotes) s'il contient un ;
-    - une ligne qui ne contient pas au moins 4 champs sera ignorée
-    - une ligne d'entête peut exister, elle sera ignoré par le script et ne sera pas importée. Cette ligne d'entête
-    est détectée par le fait que le premier champ sur la ligne lu contient "Nom"
+        Usage:
+            import_kb_glpi.php [<name>] [--entity=<entity>] [--quiet] [--no-update]
+            import_kb_glpi.php (-h | --help)
+            import_kb_glpi.php (-q | --quiet)
+            import_kb_glpi.php (-n | --no-update)
+            import_kb_glpi.php --version
 
-    - chaque ligne contient:
-        - le nom de la plage d'adresses
-        - le nom complet l'entité de rattachement. Il s'agit du chemin de l'entité depuis l'entité racine incluse, donc
-        Racine > Sous entité > Sous sous entité. Chaque élement est séparé par " > "
-        - le début de la page d'adresses
-        - la fin de la plage d'adresses
-        - le nom de l'authentification SNMP liée à la plage d'adresses (optionnel)
+        Options:
+            -h --help           Show this screen.
+            -q --quiet          Runs quietly (no output).
+            -n --no-update      Do not update existing items (documents, categories, ...).
+            --version           Show version.
+            --entity=<entity>   Entity to import to [default: Root entity].
 
-    - les 4 premiers champs sont obligatoires alors que l'authentification SNMP est facultative
+ Si 'name' n'est pas spécifié lors de l'appel du script, le nom de fichier par défaut est './import_kb_glpi.json'.
 
-    - le script vérifie les points suivants :
-        - l'entité existe dans la base de données
-        - l'adresse de début de la plage est une bien une adresse IP valide
-        - l'adresse de fin de la plage est une bien une adresse IP valide
-        - l'authentification SNMP existe dans la base de données
-    - si une des vérifications échoue, la ligne concernée n'est pas importée.
+ En cas d'erreur, le script retourne un code:
+  - 1 pour une erreur dans les paramètres d'appel (fichier non trouvé, entité inconnue)
+  - 2 pour une erreur de création de données dans la base de données
 
-    - l'import d'une ligne va créer une nouvelle plage d'adresses IP dans la base de données ou mettre à jour une
-    plage d'adresses existante si un élément de même nom est trouvé dans la base de données. De ce fait, le script
-    permet la création de nouvelles plages d'adresses et il peut être rejoué plusieurs fois pour réaliser la mise
-    à jour des plages d'adresses déjà importées
+ Le script produit un log de ses actions sur la console. Ce log peut être supprimé en utilisant le paramètre --quiet.
+ Seuls les log d'erreur seront alors écrits sur la console.
 
-    - si une authentification SNMP est indiquée dans la ligne, la relation entre la plage d'adresses IP et
-    l'authentification SNMP va être créée ou mise à jour si elle existe déjà
-    - si aucune authentification SNMP n'est indiquée dans la ligne, et qu'il existe une relation entre la plage d'adresses IP et
-          une authentification SNMP, cette relation va être supprimée
+ Lorsqu'un attachment n'est pas trouvé à l'URI indiquée, un log en informe l'utilisateur:
+    -> *** attachment not available: 'http://saunet.lks.es/documents/34118/Types_d'emplacements_et_New_Adresses.xls'...
+ Ce cas se produit pour des URI qui ne sont pas correctement formées (par exemple un fichier avec apostrophe ...) et
+ la pièce jointe ne sera pas récupérée!
+
+ Ce fichier doit être formatté de la façon suivante:
+
+{
+  "projects" : [ {
+    "externalName" : "NODHOS PROD",
+    "name" : "NODHOS PROD",
+    "key" : "MSFL428",
+    "lead" : "SPCO",
+    "projectCategoryName" : "MSF LOGISTIQUE",
+    "type" : "software",
+    "components" : [ {
+      "name" : "Anomalies",
+      "lead" : "epont",
+      "description" : "594 Anomalies"
+    } ],
+    "issues" : [ {
+                       "key" : "4111",
+                       "summary" : "Problème génération facture fret AVT",
+                       "reporter" : "msfl",
+                       "assignee" : "msfl",
+                       "description" : "ceci concerne la facturation de la Cellule Avion\r\nPour tester prendre le dossier 12217",
+                       "issueType" : "Bug",
+                       "status" : "Closed",
+                       "priority" : "HIGHEST",
+                       "resolution" : "Resolved",
+                       "created" : 1211462637000,
+                       "resolutionDate" : 1248180593000,
+                       "duedate" : 1211407200000,
+                       "components" : [ "Anomalies" ],
+                       "labels" : [ ],
+                       "watchers" : [ ],
+                       "history" : [ {
+                         "author" : "SPCO",
+                         "created" : 1211464449000,
+                         "items" : [ {
+                           "fieldType" : "jira",
+                           "field" : "status",
+                           "oldValue" : "Open",
+                           "oldDisplayValue" : "1",
+                           "newValue" : "3",
+                           "newDisplayValue" : "In Progress"
+                         } ]
+                       }, {
+                         "author" : "MAA",
+                         "created" : 1212155591000,
+                         "items" : [ {
+                           "fieldType" : "jira",
+                           "field" : "status",
+                           "oldValue" : "3",
+                           "oldDisplayValue" : "In Progress",
+                           "newValue" : "5",
+                           "newDisplayValue" : "Resolved"
+                         } ]
+                       }, {
+                         "author" : "MAA",
+                         "created" : 1248180593000,
+                         "items" : [ {
+                           "fieldType" : "jira",
+                           "field" : "status",
+                           "oldValue" : "5",
+                           "oldDisplayValue" : "Resolved",
+                           "newValue" : "6",
+                           "newDisplayValue" : "Closed"
+                         } ]
+                       } ],
+                       "comments" : [ {
+                         "body" : "Le programme doit tester si le prix de vente de la prestation est inférieur au montant minimum de la prestation (au proratat du poids du sous-dossier dans le dossier).\r\nHors le poids du dossier est à zéro donc le calcul montant mini x poids sous dossier / poids dossier plante.\r\n\r\nFaut-il interdire de saisir un poids à zéro sur le dossier?\r\nOu faut-il faire un cas particulier du poids du dossier à zéro?\r\n",
+                         "author" : "MAA",
+                         "created" : 1211472567000
+                       }, {
+                         "body" : "Il serait utile effectivement de rajouter un cas particulier du poids du dossier à zéro, car dans le cas des \"AVT\" ce champ ne sera jamais rempli.",
+                         "author" : "msfl",
+                         "created" : 1211557346000
+                       }, {
+                         "body" : "La procédure \"gen_fac_cli_ligne\" du package \"MSPCK_FACT_TRANSPORT\" ci-jointe a été modifiée pour traité le cas où le poids du dossier est à zéro.\r\n\r\nAinsi, lorsque le poids du dossier est à zéro, on compare le prix de vente de la prestation avec le montant minimum de la prestation.\r\nLorsque le poids est différent de zéro, on compare le prix du vente de la prestation avec le montant minimum de la prestation au proratat du poids du sous-dossier ( x (poids ss-dossier / poids dossier) ) comme avant.\r\n\r\nMerci d´installer la modification sur le serveur de recette et de le tester rapidement pour l´installer sur le serveur de production et ainsi me permettre de reporter les modifications de cette procédure dans mon portage pour la migration de Nodhos en version 5.2.\r\n\r\nMarie Arretche",
+                         "author" : "MAA",
+                         "created" : 1212135776000
+                       }, {
+                         "body" : "La procédure \"gen_fac_cli_ligne\" du package \"MSPCK_FACT_TRANSPORT\" ci-jointe a été modifiée pour traité le cas où le poids du dossier est à zéro.\r\n\r\nAinsi, lorsque le poids du dossier est à zéro, on compare le prix de vente de la prestation avec le montant minimum de la prestation.\r\nLorsque le poids est différent de zéro, on compare le prix du vente de la prestation avec le montant minimum de la prestation au proratat du poids du sous-dossier ( x (poids ss-dossier / poids dossier) ) comme avant.\r\n\r\nMerci d´installer la modification sur le serveur de recette et de le tester rapidement pour l´installer sur le serveur de production et ainsi me permettre de reporter les modifications de cette procédure dans mon portage pour la migration de Nodhos en version 5.2.\r\n\r\nMarie Arretche\r\n",
+                         "author" : "MAA",
+                         "created" : 1212135890000
+                       }, {
+                         "body" : "Install en recette PM : OK\r\nTests recette GB : OK\r\nLivraison prod GB : OK",
+                         "author" : "msfl",
+                         "created" : 1212155435000
+                       }, {
+                         "body" : "Validation OK + Livraison en production.",
+                         "author" : "MAA",
+                         "created" : 1212155591000
+                       }, {
+                         "body" : "Clôture interne SEI 30/05/2008",
+                         "author" : "MAA",
+                         "created" : 1248180593000
+                       } ],
+                       "customFieldValues" : [ ],
+                       "attachments" : [ {
+                         "name" : "MSPCK_FACT_TRANSPORT.sql",
+                         "attacher" : "MAA",
+                         "created" : 1212135776000,
+                         "uri" : "http://saunet.lks.es/documents/4111/MSPCK_FACT_TRANSPORT.sql"
+                       }, {
+                         "name" : "MSPCK_FACT_TRANSPORT.sql",
+                         "attacher" : "MAA",
+                         "created" : 1212135890000,
+                         "uri" : "http://saunet.lks.es/documents/4111/MSPCK_FACT_TRANSPORT.sql"
+                       } ]
+                     },
+    ...
+    ...
+
+
+    - le fichier contient un tableau de projects qui contiennent chacun un tableau d'issues
+
+    - pour chaque 'project' une catégorie est créée (ou mise à jour) dans la base de connaissance et dans les documents:
+        - la catégorie est attachée à l'entité courante
+        - la catégorie porte de le nom du projet (champ 'name')
+        - le commentaire de la catégorie indique le nom du fichier importé et la date de l'import
+
+    - pour chaque 'issue' un article est créé dans la catégorie de la base de connaissance:
+        - le titre de l'article est le numéro de l'issue et son sujet
+        - l'article contient les informations suivantes:
+                [key]: summary
+
+                ---
+
+                Issue: key, créée le: created par: reporter, status: status, résolue: resolutionDate
+
+                Type: type, priorité: priority
+
+                ---
+
+                description
+
+                ---
+
+                Documents joints:
+
+                . created, attacher: uri
+
+                ---
+
+                Commentaires:
+
+                . created, author: body
+
+                ---
+
+                Historique:
+
+                . creaed, author, status changed
+
+        - l'article est rendu visible dans l'entité courante
+
+        - les attachments de chaque issue sont récupérés depuis l'URI présent dans le fichier d'importation et un
+        document Glpi est créé pour chaque attachment. Ce document est inclus dans la catégorie de document associée
+        au projet importé et il est également lié à l'article de la base de connaissance créé.
+
+    - l'entité courante peut être modifiée (par défaut, c'est 'Root entity') par un paramètre d'appel du script.
+    --entity="Autre entité", permet de faire tourner le script pour l'entité Glpi "Autre entité"
+
+    - par défaut, le script met à jour les éléments existants dans la base de données. En spécifiant --no-update, le
+    script ne fera pas les mises à jours et il n'importera que les éléments qui ne sont pas trouvés dans la base de
+    données
